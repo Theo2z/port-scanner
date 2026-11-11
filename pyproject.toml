@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portscanner"
+version = "0.1.0"
+description = "A multithreaded TCP port scanner with banner grabbing, built from scratch with the Python standard library."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+# No runtime dependencies on purpose: everything uses the standard library.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+portscanner = "portscanner.cli:main"
+
+[tool.setuptools]
+packages = ["portscanner"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

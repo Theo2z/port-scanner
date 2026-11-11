@@ -1,0 +1,24 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environment
+.venv/
+
+# Packaging
+*.egg-info/
+build/
+dist/
+
+# Scan results: keep real scan output out of version control
+results/
+*.csv
+*.json
+!tests/fixtures/*.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
