@@ -20,7 +20,9 @@ compared with a raw-packet SYN scan like `nmap -sS`.
 
 from __future__ import annotations
 
+import queue
 import socket
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -30,6 +32,7 @@ CLOSED = "closed"
 FILTERED = "filtered"
 
 DEFAULT_TIMEOUT = 1.0  # seconds to wait for each connection attempt
+DEFAULT_THREADS = 100  # concurrent connection attempts
 
 
 @dataclass
@@ -102,21 +105,75 @@ def scan_host(
     target: str,
     ports: list[int] | range,
     timeout: float = DEFAULT_TIMEOUT,
+    threads: int = DEFAULT_THREADS,
 ) -> ScanReport:
-    """Scan the given ports on one host, one at a time.
+    """Scan the given ports on one host with a pool of worker threads.
 
-    This sequential version is the baseline. Phase 2 makes it concurrent
-    and benchmarks the difference.
+    Why threads help even with Python's GIL: the Global Interpreter Lock
+    lets only one thread run Python bytecode at a time, but a thread
+    *releases* it while blocked in a system call such as connect(). A scan
+    spends almost all its time waiting on the network, so 100 threads can
+    have 100 handshakes in flight at once. For CPU-bound work (hashing,
+    parsing) threads would not help; you would use processes instead.
+
+    Design: a producer/consumer "worker pool".
+      * One queue.Queue holds every port still to scan (the work).
+      * N worker threads each loop: take a port, probe it, record result.
+      * When the queue is empty the workers exit and we join() them.
+    Threads are created once and reused, instead of one thread per port,
+    which keeps memory use and thread-creation cost fixed no matter how
+    many ports are scanned. threads=1 gives a plain sequential scan.
     """
+    if threads < 1:
+        raise ValueError("threads must be at least 1")
+
     ip = resolve(target)
     report = ScanReport(target=target, ip=ip)
+
+    # queue.Queue is thread-safe: its own internal lock guarantees that two
+    # workers can never pull the same port.
+    work: queue.Queue[int] = queue.Queue()
+    for port in ports:
+        work.put(port)
+
+    # The results list is shared by all workers, so writes go through a
+    # Lock. (list.append happens to be atomic in CPython, but relying on
+    # that is an implementation detail; the lock states the intent.)
+    results_lock = threading.Lock()
+
+    def worker() -> None:
+        while True:
+            try:
+                # get_nowait() raises queue.Empty instead of blocking. All
+                # work is queued before any worker starts, so "empty" means
+                # "done" and the worker can simply return.
+                port = work.get_nowait()
+            except queue.Empty:
+                return
+            result = PortResult(port, scan_port(ip, port, timeout))
+            with results_lock:
+                report.results.append(result)
+
+    # Never start more threads than there are ports; extras would exit
+    # straight away and only cost creation time.
+    pool_size = min(threads, work.qsize()) or 1
 
     # perf_counter is a monotonic, high-resolution clock meant for
     # measuring durations, unlike time.time(), which can jump.
     start = time.perf_counter()
-    for port in ports:
-        report.results.append(PortResult(port, scan_port(ip, port, timeout)))
+    # daemon=True: if the main thread dies (e.g. an unhandled error), these
+    # threads won't keep the process alive. Clean Ctrl+C handling comes in
+    # Phase 6.
+    pool = [threading.Thread(target=worker, daemon=True) for _ in range(pool_size)]
+    for t in pool:
+        t.start()
+    for t in pool:
+        t.join()  # wait until every worker has finished
     report.elapsed = time.perf_counter() - start
+
+    # Workers finish in whatever order the network answers, so sort to make
+    # the output deterministic.
+    report.results.sort(key=lambda r: r.port)
     return report
 
 

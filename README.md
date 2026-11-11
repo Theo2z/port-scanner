@@ -17,11 +17,25 @@ This project is tested only against:
 ## Roadmap
 
 - [x] Phase 1: Core. TCP connect scan of one host with a configurable timeout
-- [ ] Phase 2: Speed. Worker-pool threading and benchmarks
+- [x] Phase 2: Speed. Worker-pool threading and benchmarks
 - [ ] Phase 3: Intel. Banner grabbing and basic service detection
 - [ ] Phase 4: CLI. Targets as IP, hostname or CIDR; port ranges; threads; timeout
 - [ ] Phase 5: Output. Terminal table, CSV and JSON export
 - [ ] Phase 6: Polish. Error handling, pytest suite and full docs
+
+## Benchmarks
+
+`python benchmarks/benchmark.py` scans 200 ports on `127.0.0.1` with a 0.5 s timeout. It plants 3 listening ports and checks that every run finds exactly those 3.
+
+| Threads | Time (s) | Speed-up |
+|--------:|---------:|---------:|
+| 1 | 100.35 | 1.0x |
+| 10 | 10.17 | 9.9x |
+| 50 | 2.06 | 48.7x |
+| 100 | 1.04 | 96.4x |
+| 200 | 0.55 | 181.1x |
+
+*Windows 11, Python 3.12.* Scanning is I/O-bound: threads spend nearly all their time waiting on the network, with the GIL released. So the run time is roughly `ceil(ports / threads) × timeout`.
 
 ## Development setup
 
