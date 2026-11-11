@@ -16,7 +16,7 @@ This project is tested only against:
 
 ## Roadmap
 
-- [ ] Phase 1: Core. TCP connect scan of one host with a configurable timeout
+- [x] Phase 1: Core. TCP connect scan of one host with a configurable timeout
 - [ ] Phase 2: Speed. Worker-pool threading and benchmarks
 - [ ] Phase 3: Intel. Banner grabbing and basic service detection
 - [ ] Phase 4: CLI. Targets as IP, hostname or CIDR; port ranges; threads; timeout
