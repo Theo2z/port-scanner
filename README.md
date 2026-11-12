@@ -19,7 +19,7 @@ This project is tested only against:
 - [x] Phase 1: Core. TCP connect scan of one host with a configurable timeout
 - [x] Phase 2: Speed. Worker-pool threading and benchmarks
 - [x] Phase 3: Intel. Banner grabbing and basic service detection
-- [ ] Phase 4: CLI. Targets as IP, hostname or CIDR; port ranges; threads; timeout
+- [x] Phase 4: CLI. Targets as IP, hostname or CIDR; port ranges; threads; timeout
 - [ ] Phase 5: Output. Terminal table, CSV and JSON export
 - [ ] Phase 6: Polish. Error handling, pytest suite and full docs
 
