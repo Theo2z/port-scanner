@@ -25,6 +25,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from .banner import DEFAULT_BANNER_TIMEOUT, detect_service, grab_banner
 
@@ -56,6 +57,7 @@ class ScanReport:
     ip: str  # the address we actually connected to
     results: list[PortResult] = field(default_factory=list)
     elapsed: float = 0.0  # wall-clock seconds for the whole scan
+    started_at: str = ""  # UTC start time, ISO 8601
 
     @property
     def open_ports(self) -> list[int]:
@@ -140,7 +142,11 @@ def scan_host(
         raise ValueError("threads must be at least 1")
 
     ip = resolve(target)
-    report = ScanReport(target=target, ip=ip)
+    report = ScanReport(
+        target=target,
+        ip=ip,
+        started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    )
 
     # queue.Queue is thread-safe: its own internal lock guarantees that two
     # workers can never pull the same port.
@@ -190,25 +196,3 @@ def scan_host(
     # the output deterministic.
     report.results.sort(key=lambda r: r.port)
     return report
-
-
-def format_report(report: ScanReport) -> str:
-    """Render a scan report as plain text that lists only open ports."""
-    lines = [f"Scan report for {report.target} ({report.ip})"]
-    open_results = [r for r in report.results if r.state == OPEN]
-    if open_results:
-        lines.append(f"{'PORT':<10}{'STATE':<7}{'SERVICE':<16}BANNER")
-        for r in open_results:
-            # A trailing "?" marks a guess from the port number, as in Nmap.
-            service = (r.service or "") + ("?" if r.method == "port" else "")
-            lines.append(f"{f'{r.port}/tcp':<10}{r.state:<7}{service:<16}{r.banner}")
-    else:
-        lines.append("No open ports found.")
-
-    closed = sum(r.state == CLOSED for r in report.results)
-    filtered = sum(r.state == FILTERED for r in report.results)
-    lines.append(
-        f"Scanned {len(report.results)} ports in {report.elapsed:.2f}s "
-        f"({len(open_results)} open, {closed} closed, {filtered} filtered)"
-    )
-    return "\n".join(lines)

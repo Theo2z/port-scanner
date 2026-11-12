@@ -15,7 +15,8 @@ import sys
 
 from . import __version__
 from .banner import DEFAULT_BANNER_TIMEOUT
-from .scanner import DEFAULT_THREADS, DEFAULT_TIMEOUT, format_report, scan_host
+from .output import format_table, write_csv, write_json
+from .scanner import DEFAULT_THREADS, DEFAULT_TIMEOUT, scan_host
 from .targets import TargetError, parse_ports, parse_targets
 
 MAX_THREADS = 1000  # beyond this, OS socket limits and target load bite
@@ -26,6 +27,7 @@ examples:
   portscanner scanme.nmap.org -p 22,80,443 --timeout 2
   portscanner 192.168.1.0/28 -p 1-1024 -t 200
   portscanner localhost -p 8000-8100 --no-banners
+  portscanner scanme.nmap.org -p 1-100 --csv results/scan.csv --json results/scan.json
 
 Only scan systems you own or have explicit permission to test.
 """
@@ -65,6 +67,20 @@ def _seconds(text: str) -> float:
     return value
 
 
+def _compact_ports(ports: list[int]) -> str:
+    """[1, 2, 3, 80] -> "1-3,80", so JSON doesn't list 65,535 numbers."""
+    spans: list[str] = []
+    start = prev = ports[0]
+    for p in ports[1:] + [None]:  # None flushes the last span
+        if p is not None and p == prev + 1:
+            prev = p
+            continue
+        spans.append(str(start) if start == prev else f"{start}-{prev}")
+        if p is not None:
+            start = prev = p
+    return ",".join(spans)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="portscanner",
@@ -97,6 +113,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--banner-timeout", type=_seconds, default=DEFAULT_BANNER_TIMEOUT,
         help=f"seconds to wait for a banner (default: {DEFAULT_BANNER_TIMEOUT})",
     )
+    parser.add_argument(
+        "--csv", metavar="FILE", help="also write open ports to a CSV file",
+    )
+    parser.add_argument(
+        "--json", metavar="FILE", help="also write full results to a JSON file",
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
@@ -111,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     failures = 0
+    reports = []
     for host in args.targets:
         try:
             report = scan_host(
@@ -122,7 +145,24 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: could not resolve {host!r}\n", file=sys.stderr)
             failures += 1
             continue
-        print(format_report(report) + "\n")
+        reports.append(report)
+        # flush=True so results appear as each host finishes, even when
+        # stdout is piped to a file or another program.
+        print(format_table(report) + "\n", flush=True)
+
+    # Exports are written once, after all hosts, so each file holds the
+    # whole scan.
+    if args.csv:
+        rows = write_csv(reports, args.csv)
+        print(f"Wrote {rows} open port(s) to {args.csv}")
+    if args.json:
+        settings = {
+            "targets": args.targets, "ports": _compact_ports(args.ports),
+            "threads": args.threads, "timeout": args.timeout,
+            "banners": args.banners, "banner_timeout": args.banner_timeout,
+        }
+        write_json(reports, args.json, settings)
+        print(f"Wrote JSON results to {args.json}")
 
     # Non-zero exit status if any host failed, so scripts can detect it.
     return 1 if failures else 0

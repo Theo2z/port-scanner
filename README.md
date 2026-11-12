@@ -20,7 +20,7 @@ This project is tested only against:
 - [x] Phase 2: Speed. Worker-pool threading and benchmarks
 - [x] Phase 3: Intel. Banner grabbing and basic service detection
 - [x] Phase 4: CLI. Targets as IP, hostname or CIDR; port ranges; threads; timeout
-- [ ] Phase 5: Output. Terminal table, CSV and JSON export
+- [x] Phase 5: Output. Terminal table, CSV and JSON export
 - [ ] Phase 6: Polish. Error handling, pytest suite and full docs
 
 ## Benchmarks
