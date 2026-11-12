@@ -26,6 +26,8 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from .banner import DEFAULT_BANNER_TIMEOUT, detect_service, grab_banner
+
 # Port states, named the way Nmap names them so the output is familiar.
 OPEN = "open"
 CLOSED = "closed"
@@ -41,6 +43,9 @@ class PortResult:
 
     port: int
     state: str
+    service: str = ""  # e.g. "ssh"; only filled in for open ports
+    method: str = ""  # "banner" (matched a signature) or "port" (guess)
+    banner: str = ""  # sanitized banner text, '' if the service was silent
 
 
 @dataclass
@@ -106,6 +111,8 @@ def scan_host(
     ports: list[int] | range,
     timeout: float = DEFAULT_TIMEOUT,
     threads: int = DEFAULT_THREADS,
+    grab_banners: bool = True,
+    banner_timeout: float = DEFAULT_BANNER_TIMEOUT,
 ) -> ScanReport:
     """Scan the given ports on one host with a pool of worker threads.
 
@@ -123,6 +130,11 @@ def scan_host(
     Threads are created once and reused, instead of one thread per port,
     which keeps memory use and thread-creation cost fixed no matter how
     many ports are scanned. threads=1 gives a plain sequential scan.
+
+    If grab_banners is True, each open port gets a second connection to
+    read its banner, done by the same worker so it also runs in parallel.
+    Opening a fresh connection keeps scan_port() simple; the cost is one
+    extra connection per open port, which the target can also log.
     """
     if threads < 1:
         raise ValueError("threads must be at least 1")
@@ -151,6 +163,9 @@ def scan_host(
             except queue.Empty:
                 return
             result = PortResult(port, scan_port(ip, port, timeout))
+            if result.state == OPEN and grab_banners:
+                result.banner = grab_banner(ip, port, banner_timeout)
+                result.service, result.method = detect_service(port, result.banner)
             with results_lock:
                 report.results.append(result)
 
@@ -182,8 +197,11 @@ def format_report(report: ScanReport) -> str:
     lines = [f"Scan report for {report.target} ({report.ip})"]
     open_results = [r for r in report.results if r.state == OPEN]
     if open_results:
-        lines.append(f"{'PORT':<10}STATE")
-        lines.extend(f"{f'{r.port}/tcp':<10}{r.state}" for r in open_results)
+        lines.append(f"{'PORT':<10}{'STATE':<7}{'SERVICE':<16}BANNER")
+        for r in open_results:
+            # A trailing "?" marks a guess from the port number, as in Nmap.
+            service = (r.service or "") + ("?" if r.method == "port" else "")
+            lines.append(f"{f'{r.port}/tcp':<10}{r.state:<7}{service:<16}{r.banner}")
     else:
         lines.append("No open ports found.")
 

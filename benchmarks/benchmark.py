@@ -43,7 +43,10 @@ def main() -> None:
     with ExitStack() as stack:
         open_listeners(stack, planted)
         for n in args.threads:
-            report = scan_host(HOST, port_range, timeout=args.timeout, threads=n)
+            # Banners off: this measures port-scan speed only.
+            report = scan_host(
+                HOST, port_range, timeout=args.timeout, threads=n, grab_banners=False
+            )
             # A faster scan is worthless if it is less accurate.
             assert report.open_ports == planted, (
                 f"threads={n}: expected {planted}, got {report.open_ports}"
