@@ -71,6 +71,7 @@ def format_table(report: ScanReport) -> str:
     lines.append(
         f"Scanned {len(report.results)} ports in {report.elapsed:.2f}s "
         f"({c[OPEN]} open, {c[CLOSED]} closed, {c[FILTERED]} filtered)"
+        + (" [interrupted, partial results]" if report.interrupted else "")
     )
     return "\n".join(lines)
 
@@ -136,6 +137,8 @@ def to_json_dict(reports: Iterable[ScanReport], settings: dict | None = None) ->
             "ip": report.ip,
             "started_at": report.started_at,
             "elapsed_seconds": round(report.elapsed, 3),
+            "interrupted": report.interrupted,
+            "ports_scanned": len(report.results),
             "summary": _counts(report),
             # asdict() turns each PortResult dataclass into a dict.
             "open_ports": [asdict(r) for r in report.results if r.state == OPEN],
