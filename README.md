@@ -35,7 +35,7 @@ The author accepts no liability for misuse. You are responsible for having permi
 Requires Python 3.10+.
 
 ```bash
-git clone <your-repo-url> port-scanner
+git clone https://github.com/Theo2z/port-scanner.git
 cd port-scanner
 python -m venv .venv
 .venv\Scripts\activate          # Windows
